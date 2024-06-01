@@ -18,4 +18,3 @@ git commit -m "tailscale-caddy-socat version $version"
 git tag -a "dockerhub-$version" -m "tailscale-caddy-socat version $version"
 git push
 git push --tags
-
