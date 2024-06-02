@@ -1,7 +1,7 @@
 #!/bin/ash
 trap 'kill -TERM $PID' TERM INT
 
-echo "This is Tailscale-Caddy-proxy version"
+echo "This is Tailscale-SoCaddy-proxy version"
 tailscale --version
 
 if [ ! -z "$SKIP_CADDYFILE_GENERATION" ] ; then
@@ -14,7 +14,7 @@ else
 fi
 
 if [ ! -z "$PORT_RELAY" ] ; then
-   echo "Relaying $CADDY_TARGET to port $PORT_RELAY of this container"
+   echo "Starting socat. Relaying $CADDY_TARGET to port $PORT_RELAY of this container"
 
    socat tcp-listen:$PORT_RELAY,fork,reuseaddr tcp:$CADDY_TARGET < /dev/null &
 fi

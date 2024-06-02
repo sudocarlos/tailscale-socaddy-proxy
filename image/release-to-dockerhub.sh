@@ -3,7 +3,7 @@ set -ex
 # docker hub username
 USERNAME=sudocarlos
 # image name
-IMAGE=tailscale-caddy-socat
+IMAGE=tailscale-socaddy-proxy
 # platforms
 PLATFORM=linux/amd64,linux/386
 # bump version
@@ -14,7 +14,7 @@ echo "Building version: $version"
 docker buildx build -t $USERNAME/$IMAGE:latest -t $USERNAME/$IMAGE:$version --push .
 # tag it
 git add -A
-git commit -m "tailscale-caddy-socat version $version"
-git tag -a "dockerhub-$version" -m "tailscale-caddy-socat version $version"
+git commit -m "tailscale-socaddy-proxy version $version"
+git tag -a "dockerhub-$version" -m "tailscale-csocaddy-proxy version $version"
 git push
 git push --tags
