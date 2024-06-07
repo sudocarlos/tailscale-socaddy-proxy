@@ -13,10 +13,10 @@ else
    echo 'reverse_proxy' $CADDY_TARGET >> /etc/caddy/Caddyfile
 fi
 
-if [ ! -z "$PORT_RELAY" ] ; then
-   echo "Starting socat. Relaying $CADDY_TARGET to port $PORT_RELAY of this container"
+if [ ! -z "$RELAY_PORT" ] ; then
+   echo "Starting socat. Relaying $CADDY_TARGET to port $RELAY_PORT of this container"
 
-   socat tcp-listen:$PORT_RELAY,fork,reuseaddr tcp:$CADDY_TARGET < /dev/null &
+   socat tcp-listen:$RELAY_PORT,fork,reuseaddr tcp:$CADDY_TARGET < /dev/null &
 fi
 
 echo "Starting Caddy"
