@@ -1,4 +1,4 @@
-# Tailscale‑SoCaddy‑Proxy
+# tailscale-socaddy-proxy
 
 A container image designed to run on [Start9](https://start9.com) that exposes
 local services to your Tailscale network, using **Caddy** as an HTTP reverse 
@@ -6,41 +6,35 @@ proxy and **socat** for other non‑HTTP protocols.
 
 ## Table of Contents
 
-- [Why Use This Image?](#why-use-this-image)
+- [Why?](#why)
 - [Technology Stack](#technology-stack)
 - [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Create the Caddyfile](#create-the-caddyfile)
-  - [Determine Your Tailnet Name](#determine-your-tailnet-name)
-  - [Start9 File Operations](#start9-file-operations)
-- [Usage](#usage)
-- [Future Plans](#future-plans)
-- [Contributing & Issues](#contributing--issues)
+    - [Prerequisites](#prerequisites)
+    - [Tailscale](#tailscale)
+    - [Caddy](#create-the-caddyfile)
+        - [Caddyfile](#caddyfile)
+    - [Start9](#start9)
 
----
 
-## Why Use This Image?
+## Why?
 
-Managing a small cluster of services behind a firewall can quickly become cumbersome. Tailscale lets you expose a virtual network that behaves like a LAN over the public internet, while Caddy automatically handles TLS certificates. `socat` bridges any TCP‑based control protocol (e.g. Lightning nodes, mempool RPC) that Caddy cannot reverse‑proxy.
+Accessing **Start9** services such as **BTCPayServer** and **electrs RPC** requires Tor today.
+**Tailscale** lets you privately and securely expose your services, while 
+**Caddy** takes care of obtaining and renewing TLS certificates.
+**`socat`** relays the non-HTTP ports Caddy can’t reverse‑proxy.
 
-This image pulls everything together into a **single container** that can be:
+This container image combines them 
 
-* started on any machine that supports Docker
-* integrated directly with Start9
-* configured via simple environment variables and a Caddyfile
-
----
 
 ## Technology Stack
 
 | Component | Purpose | Docs |
 |-----------|---------|------|
-| **Start9** | Local container orchestration & file persistence | [Start9 docs](https://start9.com) |
-| **Tailscale** | Zero‑configuration VPN, MagicDNS, and device authentication | [Tailscale docs](https://tailscale.com) |
+| **Start9** | Local container orchestration & file persistence | [Start9 docs](https://docs.start9.com/0.3.5.x/user-manual/) |
+| **Tailscale** | Zero‑configuration VPN, MagicDNS, and device authentication | [Tailscale docs](https://tailscale.com/kb) |
 | **Caddy** | Modern HTTP/2 reverse proxy, automatic Let's Encrypt integration | [Caddy docs](https://caddyserver.com/docs) |
 | **socat** | One‑shot TCP relay for non‑HTTP services | [socat manual](https://linux.die.net/man/1/socat) |
 
----
 
 ## Getting Started
 
@@ -51,7 +45,27 @@ This image pulls everything together into a **single container** that can be:
 3. [HTTPS certificates](https://tailscale.com/kb/1153/enabling-https) enabled
  in Tailscale **Admin console > DNS**
 
-### Caddyfile
+### Tailscale
+
+1. Log into the Tailscale **Admin console** and click [**DNS**](https://login.tailscale.com/admin/dns)
+1. Verify or set your [**Tailnet name**](https://tailscale.com/kb/1217/tailnet-name)
+1. Scroll down and **Enable HTTPS** under **HTTPS Certificates**
+
+### Caddy
+
+1. Login to your Start9, see https://docs.start9.com/0.3.5.x/user-manual/ssh
+
+        ssh start9@SERVER-HOSTNAME
+
+1. Create a directory to persist Tailscale and Caddy files
+
+        mkdir -p /home/start9/tailscale
+
+1. Create the [Caddyfile](#caddyfile) below or [`Caddyfile.example`](/Caddyfile.example)
+
+        nano /home/start9/tailscale/Caddyfile
+
+#### Caddyfile
 
 ```
 # Caddyfile
@@ -86,51 +100,21 @@ start9.your-tailnet.ts.net:21003 {
 ```
 - Replace `start9` with the Tailscale machine name you want,
  this must match `-e TS_HOSTNAME=` in `podman run`
-- Replace `your-tailnet` with your Tailnet name
+- Replace `your-tailnet.ts.net` with your [**Tailnet name**](https://tailscale.com/kb/1217/tailnet-name)
 - This example lists some common services. Feel free to discover and add more
 - See https://caddyserver.com/docs/caddyfile/patterns#reverse-proxy for more info
 
+⚠️ Files are removed by Start9 on reboot. **Back up `/home/start9/tailscale`** ⚠️
 
-### Determine Your Tailnet Name
 
-The “Tailnet name” is the short identifier for your Tailscale VPN.  
-To find it:
+### Start9
 
-1. Log into the Tailscale admin console.
-2. Look in the header of any device: the part before `.ts.net` is your tailnet name.  
-   e.g., `start9.YOUR-TAILNET.ts.net`.
-
-Alternatively, consult the troubleshooting article:  
-[Tailscale – Tailnet Name](https://tailscale.com/kb/1217/tailnet-name).
-
-### Start9 File Operations
-
-Start9 exposes a UNIX‑compatible shell inside the container. Typical file creation tasks are straightforward:
-
+1. Finally, run the container
 ```bash
-# Login to your Start9, see https://docs.start9.com/0.3.5.x/user-manual/ssh
-ssh start9@SERVER-HOSTNAME
-
-# Create a directory for state files
-mkdir -p /home/start9/tailscale
-
-# Create the Caddyfile, see Caddyfile.example in repo
-nano /home/start9/tailscale/Caddyfile
-```
-
-- ⚠️ Files are removed by Start9 on reboot. **Back up `/home/start9/tailscale`** ⚠️
-- See [Caddyfile](#caddyfile) or [`Caddyfile.example`](/Caddyfile.example)
----
-
-## Usage
-
-```bash
-# Start the container, replace 1
 sudo podman run --name start9.tailscale \
  -v /home/start9/tailscale/:/var/lib/tailscale \
  -v /home/start9/tailscale/Caddyfile:/etc/caddy/Caddyfile \
  -e TS_HOSTNAME=start9 \
- -e TS_TAILNET=YOUR-TAILNET \
  -e RELAY_LIST=50001:electrs.embassy:50001,21004:lnd.embassy:10009 \
  --net start9 \
  --restart always \
@@ -139,29 +123,9 @@ sudo podman run --name start9.tailscale \
 
 ```
 
-**Explanation**
-
-* `TS_HOSTNAME` – The DNS name that will appear in your Tailscale network (`<TS_HOSTNAME>.<TS_TAILNET>.ts.net`).
-* `RELAY_LIST` – Optional comma‑separated `port:target` pairs for socat listeners.  
-  Example: `8080:lightning:9735,9090:electrs:30001`.
-- https://tailscale.com/kb/1282/docker
-
----
-
-## Future Plans
-
-* **Integrated Web UI** – Manage reverse proxies and socat listeners from the browser (under development).
-* **CLI Enhancements** – Dynamic proxy configuration via `tailscale-socaddy-proxy` command line.
-* **Better Persistence** – Fine‑grained control over which files are auto‑synced by Start9.
-
----
-
-## Contributing & Issues
-
-Feel free to open issues for bugs or feature requests. When contributing:
-
-1. Fork the repository.
-2. Create a feature branch.
-3. Submit a pull request with tests and documentation updates.
-
-Happy hacking! 🚀
+- `TS_HOSTNAME` - your desired Tailnet machine name. This should match in your [Caddyfile](#caddyfile)
+- `RELAY_LIST` - optional, comma‑separated `listener_port:target_host:target_port` pairs for socat listeners  
+  Example: `50001:electrs.embassy:50001,21004:lnd.embassy:10009`
+- `-v` - volume mounts. Only change values on the left of `:`
+  if you decide to place files in your Start9 in a different directory
+- See https://tailscale.com/kb/1282/docker for more info
