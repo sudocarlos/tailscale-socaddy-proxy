@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1
 # check=skip=SecretsUsedInArgOrEnv
-ARG TAILSCALE_VERSION=v1.84.2
+ARG TAILSCALE_VERSION=v1.86.2
 
 FROM tailscale/tailscale:$TAILSCALE_VERSION
 
 LABEL maintainer="carlos@sudocarlos.com"
 
-ENV CADDY_TARGET=
+ENV RELAY_LIST=
 ENV TS_TAILNET=
 ENV TS_HOSTNAME=
 ENV TS_EXTRA_FLAGS=
@@ -26,5 +26,3 @@ RUN  chmod +x /usr/bin/start.sh
 
 # And run it
 CMD  [ "start.sh" ]
-
-

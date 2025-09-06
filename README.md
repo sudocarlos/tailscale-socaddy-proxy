@@ -96,3 +96,9 @@ All set! Now you can access the host via the full Tailscale domainname (includin
 # Acknowledgements
 
 Thanks to lpasselin for his [example code](https://github.com/lpasselin/tailscale-docker) that shows how to extend the default Tailscale image.
+
+# to-do
+
+- [ ] update readme to be tailored to Start9
+- [ ] include info about backing up data, certs, etc.
+- [ ] add other files to .gitignore
