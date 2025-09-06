@@ -9,13 +9,12 @@ services:
       - TS_HOSTNAME=start9
       - TS_TAILNET=YOUR-TAILNET
       - RELAY_LIST=50001:electrs.embassy:50001,21004:lnd.embassy:10009
-      - SKIP_CADDYFILE_GENERATION=true
     networks:
       - start9
     restart: always
     init: true
     image: docker.io/sudocarlos/tailscale-socaddy-proxy:latest
 networks:
-    start9:
-        external: true
-        name: start9
+  start9:
+    external: true
+    name: start9

@@ -1,104 +1,167 @@
-This is the repository of the Tailscale-Caddy proxy, a docker image that enables easy sharing of docker HTTP services over the Tailscale network via HTTPS.
+# Tailscale‑SoCaddy‑Proxy
 
-# Rationale
+A container image designed to run on [Start9](https://start9.com) that exposes
+local services to your Tailscale network, using **Caddy** as an HTTP reverse 
+proxy and **socat** for other non‑HTTP protocols.
 
-I have a few docker web services I want to share with other users.
+## Table of Contents
 
-Before Tailscale this would mean opening firewall ports and enabling authentication for the users. And then you still need to worry about the fact that your services are exposed to the world. 
+- [Why Use This Image?](#why-use-this-image)
+- [Technology Stack](#technology-stack)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Create the Caddyfile](#create-the-caddyfile)
+  - [Determine Your Tailnet Name](#determine-your-tailnet-name)
+  - [Start9 File Operations](#start9-file-operations)
+- [Usage](#usage)
+- [Future Plans](#future-plans)
+- [Contributing & Issues](#contributing--issues)
 
-Tailscale enables you to share devices securely. Setup is trivial and the maintenance of who can access what is very convenient.
+---
 
-So, I want to share web services via Tailscale. I found that there are multiple existing solutions such as:
-* the [Tailscale Docker Desktop extension](https://tailscale.com/blog/docker/), 
-* the [Tailscale sidecar](https://github.com/markpash/tailscale-sidecar) by markpash 
-* the official [Tailscale docker image](https://hub.docker.com/r/tailscale/tailscale).
+## Why Use This Image?
 
-None of those solutions fit my usage scenario so I built the solution that is available in this repo.
+Managing a small cluster of services behind a firewall can quickly become cumbersome. Tailscale lets you expose a virtual network that behaves like a LAN over the public internet, while Caddy automatically handles TLS certificates. `socat` bridges any TCP‑based control protocol (e.g. Lightning nodes, mempool RPC) that Caddy cannot reverse‑proxy.
 
-Compared to the other solutions this image:
+This image pulls everything together into a **single container** that can be:
 
-* does an auto-refresh of the SSL certificates without any further required actions by the user
-* supports a restart of the service container without having to restart the Tailscale/Caddy container
+* started on any machine that supports Docker
+* integrated directly with Start9
+* configured via simple environment variables and a Caddyfile
 
-# Functional description
+---
 
-I want to be able to serve a web application to users by running a container in parallel to the container that serves the application. The side container should perform:
+## Technology Stack
 
-* the connection to the Tailscale network
-* take care of serving the application via HTTPS with valid and regularly updated SSL certificates
+| Component | Purpose | Docs |
+|-----------|---------|------|
+| **Start9** | Local container orchestration & file persistence | [Start9 docs](https://start9.com) |
+| **Tailscale** | Zero‑configuration VPN, MagicDNS, and device authentication | [Tailscale docs](https://tailscale.com) |
+| **Caddy** | Modern HTTP/2 reverse proxy, automatic Let's Encrypt integration | [Caddy docs](https://caddyserver.com/docs) |
+| **socat** | One‑shot TCP relay for non‑HTTP services | [socat manual](https://linux.die.net/man/1/socat) |
 
-To implement this I start from the official Tailscale docker image and I extend it with Caddy. A small script that runs when starting the container takes care of creating the right configuration file for Caddy based on the environment parameters that are set when launching the container. 
+---
 
-Once started the container brings up the Tailscale connection. Users with access to the Tailscale device can connect over HTTP to port 80 (which is redirected to HTTPS) or to port 443 over HTTPS directly. The Caddy reverse proxy takes care of negotiating SSL certificated with the Tailscale daemon in the container to present valid HTTPS certificates.
+## Getting Started
 
-![block-diagram](https://github.com/hollie/tailscale-caddy-proxy/raw/main/visuals/block-diagram.png)
+### Prerequisites
 
-# Requirements
+1. A [Start9](https://docs.start9.com/0.3.5.x/user-manual/) server
+2. A [Tailscale](https://tailscale.com/kb/1017/install) with an active [Tailnet](https://tailscale.com/kb/1217/tailnet-name)
+3. [HTTPS certificates](https://tailscale.com/kb/1153/enabling-https) enabled
+ in Tailscale **Admin console > DNS**
 
-For this image to work correctly you need to enable HTTPS support and MagicDNS in your Tailscale network configuration.
+### Caddyfile
 
-# Parameters and storage
+```
+# Caddyfile
+start9.your-tailnet.ts.net:21000 {
+	reverse_proxy https://lnd.embassy:8080 {
+		header_up Host {upstream_hostport}
+		transport http {
+			tls_trust_pool file /var/lib/tailscale/tls.cert
+		}
+	}
+}
 
-The docker image takes as input parameters:
+start9.your-tailnet.ts.net:21001 {
+	reverse_proxy http://mempool.embassy:8080 {
+		header_up Host {upstream_hostport}
+	}
+}
 
-* `TS_HOSTNAME` : the name of the host on the Tailscale network
+start9.your-tailnet.ts.net:21002 {
+	reverse_proxy http://btcpayserver.embassy:80 {
+		header_up Host {upstream_hostport}
+		trusted_proxies private_ranges
+	}
+}
 
-* `TS_TAILNET`: the name of your tailnet **without** the trailing `ts.net` section.
+start9.your-tailnet.ts.net:21003 {
+	reverse_proxy http://jam.embassy:80 {
+		header_up Host {upstream_hostport}
+	}
+}
 
-* `CADDY_TARGET`: the name and port of the service you want to connect to.
+```
+- Replace `start9` with the Tailscale machine name you want,
+ this must match `-e TS_HOSTNAME=` in `podman run`
+- Replace `your-tailnet` with your Tailnet name
+- This example lists some common services. Feel free to discover and add more
+- See https://caddyserver.com/docs/caddyfile/patterns#reverse-proxy for more info
 
-You also want to declare a permanent volume to store the Tailscale credentials so that those survive a rebuild of the container. The Tailscale configuration is located in the folder `/var/lib/tailscale` in the container.
 
-# Practical use
+### Determine Your Tailnet Name
 
-Say you have an example service called 'whoami' that is a simple webserver listening on port 80 and you want to expose it via Tailscale.
+The “Tailnet name” is the short identifier for your Tailscale VPN.  
+To find it:
 
-We want to keep the network traffic between this container and the Tailscale proxy separated from the default docker network, so declare a network. Attach the whoami container to that network. Declare a container of the `hollie/tailscale-caddy-proxy` image next to it, attach it also to the same network and enter the right environmental parameters for the Tailscale and Caddy configuration.
+1. Log into the Tailscale admin console.
+2. Look in the header of any device: the part before `.ts.net` is your tailnet name.  
+   e.g., `start9.YOUR-TAILNET.ts.net`.
 
-The resulting docker compose file looks like:
+Alternatively, consult the troubleshooting article:  
+[Tailscale – Tailnet Name](https://tailscale.com/kb/1217/tailnet-name).
 
-```docker
-version: '3'
+### Start9 File Operations
 
-networks:
-  tailscale_proxy_example:
-    external: false
+Start9 exposes a UNIX‑compatible shell inside the container. Typical file creation tasks are straightforward:
 
-volumes:
-  tailscale-whoami-state:
+```bash
+# Login to your Start9, see https://docs.start9.com/0.3.5.x/user-manual/ssh
+ssh start9@SERVER-HOSTNAME
 
-services:
+# Create a directory for state files
+mkdir -p /home/start9/tailscale
 
-  whoami:
-    image: traefik/whoami
-    networks:
-     - tailscale_proxy_example
-
-  tailscale-whoami-proxy:
-    image: hollie/tailscale-caddy-proxy:latest
-    volumes:
-      - tailscale-whoami-state:/var/lib/tailscale # Persist tailscale state
-    environment:
-      - TS_HOSTNAME=tailscale-example # Hostname on the tailscale network
-      - TS_TAILNET=tailnet-XXXX       # Your tailnet name without the .ts.net suffix!
-      - CADDY_TARGET=whoami:80        # Target service and port
-#      - TS_EXTRA_ARGS=<optional extra arguments> # When starting tailscale in the container, e.g. to allow exit node or override the DNS settings. 
-    restart: on-failure
-    init: true
-    networks:
-     - tailscale_proxy_example
+# Create the Caddyfile, see Caddyfile.example in repo
+nano /home/start9/tailscale/Caddyfile
 ```
 
-Run `docker-compose up` and visit the link that is printed in the terminal to authenticate the machine to your Tailscale network. Disable key expiry via the Tailscale settings page for this host and restart the containers with `docker compose up -d`. 
+- ⚠️ Files are removed by Start9 on reboot. **Back up `/home/start9/tailscale`** ⚠️
+- See [Caddyfile](#caddyfile) or [`Caddyfile.example`](/Caddyfile.example)
+---
 
-All set! Now you can access the host via the full Tailscale domainname (including the tailnet-XXX.ts.net).
+## Usage
 
-# Acknowledgements
+```bash
+# Start the container, replace 1
+sudo podman run --name start9.tailscale \
+ -v /home/start9/tailscale/:/var/lib/tailscale \
+ -v /home/start9/tailscale/Caddyfile:/etc/caddy/Caddyfile \
+ -e TS_HOSTNAME=start9 \
+ -e TS_TAILNET=YOUR-TAILNET \
+ -e RELAY_LIST=50001:electrs.embassy:50001,21004:lnd.embassy:10009 \
+ --net start9 \
+ --restart always \
+ --init \
+ docker.io/sudocarlos/tailscale-socaddy-proxy:latest
 
-Thanks to lpasselin for his [example code](https://github.com/lpasselin/tailscale-docker) that shows how to extend the default Tailscale image.
+```
 
-# to-do
+**Explanation**
 
-- [ ] update readme to be tailored to Start9
-- [ ] include info about backing up data, certs, etc.
-- [ ] add other files to .gitignore
+* `TS_HOSTNAME` – The DNS name that will appear in your Tailscale network (`<TS_HOSTNAME>.<TS_TAILNET>.ts.net`).
+* `RELAY_LIST` – Optional comma‑separated `port:target` pairs for socat listeners.  
+  Example: `8080:lightning:9735,9090:electrs:30001`.
+- https://tailscale.com/kb/1282/docker
+
+---
+
+## Future Plans
+
+* **Integrated Web UI** – Manage reverse proxies and socat listeners from the browser (under development).
+* **CLI Enhancements** – Dynamic proxy configuration via `tailscale-socaddy-proxy` command line.
+* **Better Persistence** – Fine‑grained control over which files are auto‑synced by Start9.
+
+---
+
+## Contributing & Issues
+
+Feel free to open issues for bugs or feature requests. When contributing:
+
+1. Fork the repository.
+2. Create a feature branch.
+3. Submit a pull request with tests and documentation updates.
+
+Happy hacking! 🚀

@@ -7,7 +7,6 @@ FROM tailscale/tailscale:$TAILSCALE_VERSION
 LABEL maintainer="carlos@sudocarlos.com"
 
 ENV RELAY_LIST=
-ENV TS_TAILNET=
 ENV TS_HOSTNAME=
 ENV TS_EXTRA_FLAGS=
 ENV TS_USERSPACE=true
