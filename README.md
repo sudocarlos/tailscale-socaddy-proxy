@@ -1,4 +1,4 @@
-# tailscale-socaddy-proxy
+# tailrelay
 
 A container image designed to run on [Start9](https://start9.com) that exposes
 local services to your Tailscale network, using **Caddy** as an HTTP reverse 
