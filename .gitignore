@@ -2,3 +2,4 @@ docker-compose-test*
 docker-compose.yml
 compose.yml
 Caddyfile
+tailscale/*

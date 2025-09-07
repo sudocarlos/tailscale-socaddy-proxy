@@ -4,6 +4,8 @@ A container image designed to run on [Start9](https://start9.com) that exposes
 local services to your Tailscale network, using **Caddy** as an HTTP reverse 
 proxy and **socat** for other non‑HTTP protocols.
 
+![](images/tailrelay.svg)
+
 ## Table of Contents
 
 - [Why?](#why)
@@ -65,6 +67,8 @@ This container image combines them
 
         nano /home/start9/tailscale/Caddyfile
 
+1. ⚠️ Files are removed by Start9 on reboot. **Back up `/home/start9/tailscale`** ⚠️
+
 #### Caddyfile
 
 ```
@@ -117,9 +121,7 @@ sudo podman run --name start9.tailscale \
  -e TS_HOSTNAME=start9 \
  -e RELAY_LIST=50001:electrs.embassy:50001,21004:lnd.embassy:10009 \
  --net start9 \
- --restart always \
- --init \
- docker.io/sudocarlos/tailscale-socaddy-proxy:latest
+ docker.io/sudocarlos/tailrelay:latest
 
 ```
 
