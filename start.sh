@@ -8,6 +8,9 @@ TAILRELAY_VERSION=v0.1
 #   RELAY_LIST=50001:electrs.embassy:50001,21004:lnd.embassy:10009
 RELAY_LIST=${RELAY_LIST:-}
 
+export TS_ENABLE_METRICS=true
+export TS_ENABLE_HEALTH_CHECK=true
+
 echo -n "Starting tailrelay ${TAILRELAY_VERSION} with Tailscale v"
 tailscale --version | head -1
 

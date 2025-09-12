@@ -12,6 +12,8 @@ ENV TS_HOSTNAME=
 ENV TS_EXTRA_FLAGS=
 ENV TS_STATE_DIR=/var/lib/tailscale/ 
 ENV TS_AUTH_ONCE=true
+ENV TS_ENABLE_METRICS=true
+ENV TS_ENABLE_HEALTH_CHECK=true
 
 RUN apk update && \
     apk upgrade --no-cache && \

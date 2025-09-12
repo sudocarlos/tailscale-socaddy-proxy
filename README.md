@@ -131,3 +131,34 @@ sudo podman run --name start9.tailscale \
 - `-v` - volume mounts. Only change values on the left of `:`
   if you decide to place files in your Start9 in a different directory
 - See https://tailscale.com/kb/1282/docker for more info
+
+
+## Testing with Docker‑Compose
+
+The repository includes two helper scripts that build the image, launch a test
+environment with `docker‑compose`, run a series of health checks, and then shut
+down the containers again.
+
+```.env.example```
+This file contains the environment variables required for the test container
+to connect to a running Tailscale network.  
+Copy it to a local ```.env``` file and edit the values as needed, e.g.:
+
+```bash
+cp .env.example .env
+# Edit variables (TAILRELAY_HOST, TAILNET_DOMAIN, COMPOSE_FILE)
+```
+
+Once the `.env` file is set, any of the following scripts will pick it up:
+   * `docker-compose-test.py` – pure Python implementation (requires `docker`
+     and `docker‑compose` Python packages).
+   * `docker-compose-test.sh` – Bash wrapper that reads the same environment
+     variables.
+
+```bash
+# From the repository root
+# 1. Test with Python script
+python docker-compose-test.py
+
+# 2. Test with Bash script
+./docker-compose-test.sh
