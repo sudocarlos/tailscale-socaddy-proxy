@@ -211,4 +211,4 @@ pyrightconfig.json
 docker-compose.yml
 compose.yml
 Caddyfile
-tailscale/*
+tailscale*
