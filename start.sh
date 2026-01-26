@@ -1,6 +1,6 @@
 #!/bin/ash
 trap 'kill -TERM $PID' TERM INT
-TAILRELAY_VERSION=v0.1.1
+TAILRELAY_VERSION=v0.2.0
 
 # Accept a single comma‑separated list of port:target pairs
 # Each item in the list represents one socat relay
@@ -14,6 +14,16 @@ export TS_ENABLE_HEALTH_CHECK=true
 echo -n "Starting tailrelay ${TAILRELAY_VERSION} with Tailscale v"
 tailscale --version | head -1
 
+
+# Start Web UI
+echo -n "Starting Tailrelay Web UI... "
+/usr/bin/tailrelay-webui --config /etc/tailrelay/webui.yaml > /var/log/tailrelay-webui.log 2>&1 &
+WEBUI_PID=$!
+if [ $? -ne 0 ]; then
+   echo "failed!"
+else
+   echo "success! (PID: $WEBUI_PID, available at http://0.0.0.0:8021)"
+fi
 
 # Spawn socat instances if RELAY_LIST is provided
 if [ ! -z "$RELAY_LIST" ]; then

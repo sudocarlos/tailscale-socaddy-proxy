@@ -4,18 +4,25 @@ A container image designed to run on [Start9](https://start9.com) that exposes
 local services to your Tailscale network, using **Caddy** as an HTTP reverse 
 proxy and **socat** for other non‑HTTP protocols.
 
+**New in v0.2.0:** Now includes a comprehensive **Web UI** for managing Tailscale, Caddy proxies, socat relays, and backups through your browser!
+
 ![](images/tailrelay.svg)
 
 ## Table of Contents
 
 - [Why?](#why)
 - [Technology Stack](#technology-stack)
+- [Web UI](#web-ui)
+    - [Features](#features)
+    - [Access](#access)
+    - [Authentication](#authentication)
 - [Getting Started](#getting-started)
     - [Prerequisites](#prerequisites)
     - [Tailscale](#tailscale)
-    - [Caddy](#create-the-caddyfile)
+    - [Caddy (Manual Configuration)](#caddy-manual-configuration)
         - [Caddyfile](#caddyfile)
     - [Start9](#start9)
+- [Testing with Docker‑Compose](#testing-with-docker-compose)
 
 
 ## Why?
@@ -36,6 +43,51 @@ This container image combines them
 | **Tailscale** | Zero‑configuration VPN, MagicDNS, and device authentication | [Tailscale docs](https://tailscale.com/kb) |
 | **Caddy** | Modern HTTP/2 reverse proxy, automatic Let's Encrypt integration | [Caddy docs](https://caddyserver.com/docs) |
 | **socat** | One‑shot TCP relay for non‑HTTP services | [socat manual](https://linux.die.net/man/1/socat) |
+| **Web UI** | Browser-based management interface (Go, HTML/CSS/JS) | *See below* |
+
+
+## Web UI
+
+The Web UI provides a comprehensive browser-based interface for managing all aspects of tailrelay without manual configuration file editing.
+
+### Features
+
+- **Dashboard**: Overview of Tailscale connection status and system health
+- **Tailscale Management**: Connect/disconnect, view peers, check status
+- **Caddy Proxy Management**: Add, edit, delete, and toggle HTTP/HTTPS reverse proxies
+- **Socat Relay Management**: Add, edit, delete, and manage TCP relay processes
+- **Backup & Restore**: Create, download, upload, and restore configuration backups
+- **Auto-configuration**: Automatically generates Caddyfile from GUI settings
+- **Dark Theme**: Modern, responsive interface optimized for readability
+
+### Access
+
+The Web UI runs on **port 8021** by default. After starting the container:
+
+```bash
+# Access via Tailscale hostname (if HTTPS is enabled)
+https://your-hostname.your-tailnet.ts.net:8021
+
+# Or via local IP
+http://localhost:8021
+```
+
+### Authentication
+
+The Web UI uses dual authentication:
+
+1. **Token Authentication**: A random token is generated on first startup and stored at `/var/lib/tailscale/.webui_token`. You can view it with:
+   ```bash
+   # For podman
+   sudo podman exec start9.tailscale cat /var/lib/tailscale/.webui_token
+   
+   # For docker
+   docker exec <container-name> cat /var/lib/tailscale/.webui_token
+   ```
+
+2. **Tailscale Network Authentication**: If you access the Web UI from a device on your Tailscale network, you're automatically authenticated (no token needed).
+
+**Security Note**: The Web UI is designed to be accessed from your Tailscale network. If exposing port 8021 externally, ensure proper firewall rules are in place.
 
 
 ## Getting Started
@@ -53,7 +105,9 @@ This container image combines them
 1. Verify or set your [**Tailnet name**](https://tailscale.com/kb/1217/tailnet-name)
 1. Scroll down and **Enable HTTPS** under **HTTPS Certificates**
 
-### Caddy
+### Caddy (Manual Configuration)
+
+**Note**: With the Web UI, you can manage Caddy proxies through the browser instead of manually editing the Caddyfile. This section is for advanced users who prefer manual configuration.
 
 1. Login to your Start9, see https://docs.start9.com/0.3.5.x/user-manual/ssh
 
@@ -113,24 +167,45 @@ start9.your-tailnet.ts.net:21003 {
 
 ### Start9
 
-1. Finally, run the container
+1. Run the container with Web UI port exposed:
+
 ```bash
 sudo podman run --name start9.tailscale \
  -v /home/start9/tailscale/:/var/lib/tailscale \
  -v /home/start9/tailscale/Caddyfile:/etc/caddy/Caddyfile \
  -e TS_HOSTNAME=start9 \
  -e RELAY_LIST=50001:electrs.embassy:50001,21004:lnd.embassy:10009 \
+ -p 8021:8021 \
  --net start9 \
  docker.io/sudocarlos/tailrelay:latest
-
 ```
 
+**Environment Variables:**
 - `TS_HOSTNAME` - your desired Tailnet machine name. This should match in your [Caddyfile](#caddyfile)
-- `RELAY_LIST` - optional, comma‑separated `listener_port:target_host:target_port` pairs for socat listeners  
-  Example: `50001:electrs.embassy:50001,21004:lnd.embassy:10009`
-- `-v` - volume mounts. Only change values on the left of `:`
-  if you decide to place files in your Start9 in a different directory
-- See https://tailscale.com/kb/1282/docker for more info
+- `RELAY_LIST` - **(Optional, deprecated)** comma‑separated `listener_port:target_host:target_port` pairs for socat listeners  
+  Example: `50001:electrs.embassy:50001,21004:lnd.embassy:10009`  
+  **Recommendation**: Use the Web UI to manage relays instead.
+
+**Volume Mounts:**
+- `-v /home/start9/tailscale/:/var/lib/tailscale` - Tailscale state, Web UI configs, backups
+- `-v /home/start9/tailscale/Caddyfile:/etc/caddy/Caddyfile` - Caddy configuration (optional if using Web UI)
+
+**Port Mappings:**
+- `-p 8021:8021` - Web UI (add this if you want browser access)
+- Additional ports: Add `-p` flags for any custom Caddy proxies or socat relays
+
+**Network:**
+- `--net start9` - Required to access Start9 services
+
+See https://tailscale.com/kb/1282/docker for more info on Tailscale Docker options.
+
+2. View the Web UI authentication token:
+
+```bash
+sudo podman exec start9.tailscale cat /var/lib/tailscale/.webui_token
+```
+
+3. Access the Web UI at `http://localhost:8021` or `https://start9.your-tailnet.ts.net:8021`
 
 
 ## Testing with Docker‑Compose
@@ -162,3 +237,95 @@ python docker-compose-test.py
 
 # 2. Test with Bash script
 ./docker-compose-test.sh
+```
+
+## Troubleshooting
+
+### Web UI Not Accessible
+
+1. Check if the container is running:
+   ```bash
+   sudo podman ps | grep tailscale
+   ```
+
+2. Verify the Web UI port is mapped:
+   ```bash
+   sudo podman port start9.tailscale
+   ```
+
+3. Check Web UI logs:
+   ```bash
+   sudo podman logs start9.tailscale | grep -i webui
+   ```
+
+4. Verify the Web UI is listening inside the container:
+   ```bash
+   sudo podman exec start9.tailscale netstat -tulnp | grep 8021
+   ```
+
+### Cannot Log In to Web UI
+
+1. Retrieve the authentication token:
+   ```bash
+   sudo podman exec start9.tailscale cat /var/lib/tailscale/.webui_token
+   ```
+
+2. If accessing from a Tailscale device, ensure you're using the Tailscale IP or hostname
+
+3. Clear browser cache/cookies and try again
+
+### Caddy Proxy Not Working
+
+1. Check Caddyfile syntax in Web UI or manually:
+   ```bash
+   sudo podman exec start9.tailscale caddy validate --config /etc/caddy/Caddyfile
+   ```
+
+2. Verify Caddy is running:
+   ```bash
+   sudo podman exec start9.tailscale caddy list-modules
+   ```
+
+3. Check Caddy logs:
+   ```bash
+   sudo podman logs start9.tailscale | grep -i caddy
+   ```
+
+### Socat Relay Not Working
+
+1. Check relay status in Web UI or manually:
+   ```bash
+   sudo podman exec start9.tailscale ps aux | grep socat
+   ```
+
+2. Verify listening ports:
+   ```bash
+   sudo podman exec start9.tailscale netstat -tulnp | grep socat
+   ```
+
+3. Test connectivity to target service:
+   ```bash
+   sudo podman exec start9.tailscale nc -zv target-host target-port
+   ```
+
+## Version History
+
+- **v0.2.0** (2026-01-26)
+  - Added comprehensive Web UI for browser-based management
+  - Web UI features: Dashboard, Tailscale control, Caddy proxy management, socat relay management, backup/restore
+  - Auto-migration from RELAY_LIST environment variable to JSON configuration
+  - Dual authentication (token + Tailscale network)
+  - Dark theme with responsive design
+
+- **v0.1.1** (Previous)
+  - Initial release with Tailscale, Caddy, and socat integration
+  - Manual Caddyfile configuration
+  - Environment variable-based socat relay configuration
+
+## Contributing
+
+Contributions are welcome! Please submit issues or pull requests on the GitHub repository.
+
+## License
+
+This project is open source. See the repository for license details.
