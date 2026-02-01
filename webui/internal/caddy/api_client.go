@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/sudocarlos/tailrelay-webui/internal/logger"
 )
 
 const (
@@ -37,18 +39,32 @@ func NewAPIClient(baseURL string) *APIClient {
 // doRequest performs an HTTP request and returns the response body
 func (c *APIClient) doRequest(method, path string, body interface{}) ([]byte, error) {
 	var reqBody io.Reader
+	var bodyPreview string
 
 	if body != nil {
 		data, err := json.Marshal(body)
 		if err != nil {
+			logger.Error("caddy", "Failed to marshal request body: %v", err)
 			return nil, fmt.Errorf("marshal request body: %w", err)
 		}
 		reqBody = bytes.NewBuffer(data)
+		// Preview first 200 chars for logging
+		if len(data) > 200 {
+			bodyPreview = string(data[:200]) + "..."
+		} else {
+			bodyPreview = string(data)
+		}
 	}
 
 	url := c.BaseURL + path
+	logger.Debug("caddy", "Caddy API request: %s %s", method, url)
+	if bodyPreview != "" {
+		logger.Debug("caddy", "Request body: %s", bodyPreview)
+	}
+
 	req, err := http.NewRequest(method, url, reqBody)
 	if err != nil {
+		logger.Error("caddy", "Failed to create HTTP request for %s %s: %v", method, url, err)
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
@@ -58,16 +74,29 @@ func (c *APIClient) doRequest(method, path string, body interface{}) ([]byte, er
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
+		logger.Error("caddy", "HTTP request failed for %s %s: %v", method, url, err)
 		return nil, fmt.Errorf("execute request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
+		logger.Error("caddy", "Failed to read response body from %s %s: %v", method, url, err)
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
+	// Log response status and body preview
+	respPreview := string(respBody)
+	if len(respPreview) > 200 {
+		respPreview = respPreview[:200] + "..."
+	}
+	logger.Debug("caddy", "Caddy API response: %d %s", resp.StatusCode, resp.Status)
+	if len(respBody) > 0 {
+		logger.Debug("caddy", "Response body: %s", respPreview)
+	}
+
 	if resp.StatusCode >= 400 {
+		logger.Error("caddy", "Caddy API error %d for %s %s: %s", resp.StatusCode, method, url, string(respBody))
 		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -153,6 +182,29 @@ func (c *APIClient) GetReverseProxyUpstreams() ([]UpstreamStatus, error) {
 	}
 
 	return upstreams, nil
+}
+
+// DiscoverServerName discovers the first HTTP server name from Caddy config
+// Returns the first server name found, or empty string if none exist
+func (c *APIClient) DiscoverServerName() (string, error) {
+	data, err := c.GetConfig("/apps/http/servers")
+	if err != nil {
+		return "", fmt.Errorf("get servers: %w", err)
+	}
+
+	// Parse as map to get server names
+	var servers map[string]interface{}
+	if err := json.Unmarshal(data, &servers); err != nil {
+		return "", fmt.Errorf("unmarshal servers: %w", err)
+	}
+
+	// Return first server name found
+	for name := range servers {
+		logger.Debug("caddy", "Discovered Caddy server name: %s", name)
+		return name, nil
+	}
+
+	return "", fmt.Errorf("no HTTP servers found in Caddy config")
 }
 
 // UpstreamStatus represents the status of a reverse proxy upstream
